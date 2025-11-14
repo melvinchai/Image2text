@@ -4,8 +4,10 @@ from PIL import Image, ImageOps
 import numpy as np
 import json
 
-# Initialize EasyOCR reader once
-reader = easyocr.Reader(['en'])
+# --- Preload EasyOCR model at startup ---
+# This will trigger the model download once, then cache it.
+with st.spinner("Initializing EasyOCR model… (first run may take a few minutes)"):
+    reader = easyocr.Reader(['en'], gpu=False)
 
 def load_and_fix_orientation(uploaded_file):
     """Load an uploaded image and normalize EXIF orientation so it's upright."""
@@ -55,7 +57,7 @@ if uploaded_file is not None:
     img = load_and_fix_orientation(uploaded_file)
     st.image(img, caption="Upright receipt", use_column_width=True)
 
-    with st.spinner("Scanning receipt with EasyOCR..."):
+    with st.spinner("Scanning receipt with EasyOCR…"):
         results = run_easyocr(img)
 
     st.subheader("Raw OCR Results")
