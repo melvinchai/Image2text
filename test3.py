@@ -16,7 +16,7 @@ image = st.file_uploader("Upload your image", type=['png', 'jpg', 'jpeg'])
 MODEL_DIR = "/tmp/easyocr_models"
 os.makedirs(MODEL_DIR, exist_ok=True)
 
-# Confidence threshold for filtering results
+# Confidence threshold for marking results
 CONF_THRESHOLD = 0.6
 
 # Initialize OCR model once per session
@@ -57,19 +57,15 @@ if image is not None:
             result = reader.readtext(img_array)
             st.write("TRACE: OCR readtext completed.")
 
-            # Show raw OCR result for debugging
-            st.write("TRACE: Raw OCR result:", result)
+            # Display all results with confidence markers
+            st.write("### Extracted Text (all results)")
+            for _, text, conf in result:
+                if conf >= CONF_THRESHOLD:
+                    st.write(f"✅ {text} (confidence: {conf:.2f})")
+                else:
+                    st.write(f"* {text} (low confidence: {conf:.2f})")
 
-            # Filter by confidence threshold
-            filtered = [(text, conf) for (_, text, conf) in result if conf >= CONF_THRESHOLD]
-
-            if filtered:
-                st.write("### Extracted Text (confidence ≥ 0.6)")
-                for text, conf in filtered:
-                    st.write(f"- {text} (confidence: {conf:.2f})")
-                st.success("Here you go!")
-            else:
-                st.warning("No text detected above confidence threshold.")
+            st.success("Here you go!")
 
         # Cleanup memory after OCR
         gc.collect()
