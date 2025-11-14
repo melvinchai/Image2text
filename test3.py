@@ -4,10 +4,13 @@ from PIL import Image, ImageOps
 import numpy as np
 import json
 
-# --- Preload EasyOCR model at startup ---
-# This will trigger the model download once, then cache it.
-with st.spinner("Initializing EasyOCR model… (first run may take a few minutes)"):
-    reader = easyocr.Reader(['en'], gpu=False)
+# --- Cache the EasyOCR reader so it only initializes once ---
+@st.cache_resource
+def get_reader():
+    # gpu=False ensures CPU mode on Streamlit Cloud
+    return easyocr.Reader(['en'], gpu=False)
+
+reader = get_reader()
 
 def load_and_fix_orientation(uploaded_file):
     """Load an uploaded image and normalize EXIF orientation so it's upright."""
