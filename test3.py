@@ -10,44 +10,49 @@ st.header('Extracting text from Image')
 # File uploader
 image = st.file_uploader("Upload your image", type=['png', 'jpg', 'jpeg'])
 
-# Ensure a writable model directory (Streamlit Cloud supports /tmp)
+# Ensure a writable model directory
 MODEL_DIR = "/tmp/easyocr_models"
 os.makedirs(MODEL_DIR, exist_ok=True)
 
-# Cache the OCR model so it loads only once
 @st.cache_resource
 def load_model():
-    return easyocr.Reader(
+    st.write("TRACE: Initializing EasyOCR model...")
+    reader = easyocr.Reader(
         ['en'],
-        gpu=False,  # force CPU-only
+        gpu=False,
         model_storage_directory=MODEL_DIR,
         user_network_directory=MODEL_DIR
     )
+    st.write("TRACE: Model initialized successfully.")
+    return reader
 
 try:
     reader = load_model()
 except Exception as e:
-    st.error(f"Failed to initialize OCR model: {e}")
+    st.error(f"TRACE: Failed to initialize OCR model: {e}")
     st.stop()
 
 if image is not None:
-    # Normalize image mode
-    input_image = Image.open(image).convert('RGB')
-    st.image(input_image, caption="Uploaded Image", use_column_width=True)
+    st.write("TRACE: Image uploaded.")
+    try:
+        input_image = Image.open(image).convert('RGB')
+        st.write("TRACE: Image converted to RGB.")
+        st.image(input_image, caption="Uploaded Image", use_column_width=True)
 
-    with st.spinner("Melvin at work..."):
-        try:
-            # Run OCR
+        with st.spinner("Melvin at work..."):
+            st.write("TRACE: Starting OCR readtext...")
             result = reader.readtext(np.array(input_image))
-            result_text = [text[1] for text in result]
+            st.write("TRACE: OCR readtext completed.")
 
-            # Display extracted text
+            result_text = [text[1] for text in result]
+            st.write("TRACE: Extracted text list constructed.")
+
             st.write("### Extracted Text")
             st.write(result_text)
             st.success("Here you go!")
-        except Exception as e:
-            st.error(f"OCR error: {e}")
+    except Exception as e:
+        st.error(f"TRACE: OCR failed with error: {e}")
 else:
-    st.write("Upload an image to begin")
+    st.write("TRACE: No image uploaded yet.")
 
 st.caption("Made by Melvin")
