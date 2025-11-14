@@ -1,8 +1,10 @@
 import streamlit as st
 import easyocr
 from PIL import Image, ImageOps
+import numpy as np
+import json
 
-# Initialize EasyOCR reader once (English receipts; add 'ch_sim' if needed)
+# Initialize EasyOCR reader once
 reader = easyocr.Reader(['en'])
 
 def load_and_fix_orientation(uploaded_file):
@@ -12,23 +14,62 @@ def load_and_fix_orientation(uploaded_file):
     return img
 
 def run_easyocr(img):
-    """Run EasyOCR on a PIL image and return results."""
-    results = reader.readtext(img)
+    """Run EasyOCR on a PIL image by converting to NumPy array."""
+    img_np = np.array(img)  # Convert PIL → NumPy
+    results = reader.readtext(img_np)
     return results
 
+def build_structured_json(results, filename, threshold=0.7):
+    """
+    Build a structured JSON skeleton from OCR results.
+    Marks low-confidence items with an asterisk.
+    """
+    structured = {
+        "filename": filename,
+        "vendor_name": None,
+        "date": None,
+        "currency": "RM",  # default assumption
+        "total_amount": None,
+        "payment_method": None,
+        "invoice_number": None,
+        "line_items": []
+    }
+
+    for idx, (bbox, text, confidence) in enumerate(results):
+        # Add asterisk if confidence below threshold
+        flagged_text = text + (" *" if confidence < threshold else "")
+        structured["line_items"].append({
+            "description": flagged_text,
+            "code": None,
+            "quantity": None,
+            "unit_price": None,
+            "line_total": None,
+            "confidence": confidence
+        })
+
+    return structured
+
 # --- Streamlit UI ---
-st.title("Receipt OCR Scanner (EasyOCR)")
+st.title("Receipt OCR Scanner (EasyOCR → JSON)")
 
 uploaded_file = st.file_uploader("Upload a receipt image", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    # Show the image
     st.image(uploaded_file, caption="Uploaded receipt", use_column_width=True)
 
     with st.spinner("Scanning receipt with EasyOCR..."):
         img = load_and_fix_orientation(uploaded_file)
         results = run_easyocr(img)
 
-    st.subheader("OCR Results")
+    st.subheader("Raw OCR Results")
+    threshold = 0.7  # confidence threshold
     for idx, (bbox, text, confidence) in enumerate(results):
-        st.write(f"{idx}: {text} (confidence: {confidence:.2f})")
+        marker = "*" if confidence < threshold else ""
+        st.write(f"{idx}: {text}{marker} (confidence: {confidence:.2f})")
+
+    st.subheader("Structured JSON (for Claude reconciliation)")
+    structured = build_structured_json(results, uploaded_file.name, threshold=threshold)
+    st.json(structured)
+
+    json_str = json.dumps(structured, indent=2)
+    st.download_button("Download JSON", json_str, file_name="receipt.json", mime="application/json")
