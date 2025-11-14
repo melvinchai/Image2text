@@ -20,15 +20,12 @@ def run_easyocr(img):
     return results
 
 def build_structured_json(results, filename, threshold=0.7):
-    """
-    Build a structured JSON skeleton from OCR results.
-    Marks low-confidence items with an asterisk.
-    """
+    """Build structured JSON skeleton from OCR results, flagging low-confidence items."""
     structured = {
         "filename": filename,
         "vendor_name": None,
         "date": None,
-        "currency": "RM",  # default assumption
+        "currency": "RM",
         "total_amount": None,
         "payment_method": None,
         "invoice_number": None,
@@ -36,7 +33,6 @@ def build_structured_json(results, filename, threshold=0.7):
     }
 
     for idx, (bbox, text, confidence) in enumerate(results):
-        # Add asterisk if confidence below threshold
         flagged_text = text + (" *" if confidence < threshold else "")
         structured["line_items"].append({
             "description": flagged_text,
@@ -55,14 +51,15 @@ st.title("Receipt OCR Scanner (EasyOCR → JSON)")
 uploaded_file = st.file_uploader("Upload a receipt image", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    st.image(uploaded_file, caption="Uploaded receipt", use_column_width=True)
+    # Fix orientation before showing
+    img = load_and_fix_orientation(uploaded_file)
+    st.image(img, caption="Upright receipt", use_column_width=True)
 
     with st.spinner("Scanning receipt with EasyOCR..."):
-        img = load_and_fix_orientation(uploaded_file)
         results = run_easyocr(img)
 
     st.subheader("Raw OCR Results")
-    threshold = 0.7  # confidence threshold
+    threshold = 0.7
     for idx, (bbox, text, confidence) in enumerate(results):
         marker = "*" if confidence < threshold else ""
         st.write(f"{idx}: {text}{marker} (confidence: {confidence:.2f})")
