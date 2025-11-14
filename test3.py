@@ -2,19 +2,33 @@ import streamlit as st
 from PIL import Image
 import numpy as np
 import easyocr
+import os
 
 st.set_page_config(page_title='Melvin demo')
 st.header('Extracting text from Image')
 
-# Upload image
+# File uploader
 image = st.file_uploader("Upload your image", type=['png', 'jpg', 'jpeg'])
 
-# Load OCR model once and cache it
+# Ensure a writable model directory (Streamlit Cloud supports /tmp)
+MODEL_DIR = "/tmp/easyocr_models"
+os.makedirs(MODEL_DIR, exist_ok=True)
+
+# Cache the OCR model so it loads only once
 @st.cache_resource
 def load_model():
-    return easyocr.Reader(['en'])
+    return easyocr.Reader(
+        ['en'],
+        gpu=False,  # force CPU-only
+        model_storage_directory=MODEL_DIR,
+        user_network_directory=MODEL_DIR
+    )
 
-reader = load_model()
+try:
+    reader = load_model()
+except Exception as e:
+    st.error(f"Failed to initialize OCR model: {e}")
+    st.stop()
 
 if image is not None:
     # Normalize image mode
@@ -32,7 +46,7 @@ if image is not None:
             st.write(result_text)
             st.success("Here you go!")
         except Exception as e:
-            st.error(f"Error during OCR: {e}")
+            st.error(f"OCR error: {e}")
 else:
     st.write("Upload an image to begin")
 
