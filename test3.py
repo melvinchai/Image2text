@@ -3,32 +3,40 @@ import easyocr
 from PIL import Image, ImageOps
 import numpy as np
 import json
+import os
 
-# --- Cache the EasyOCR reader and warm it up at startup ---
+# --- Configure EasyOCR to use bundled models ---
+MODEL_DIR = os.path.join(os.path.dirname(__file__), "models", "easyocr")
+
 @st.cache_resource
 def get_reader():
-    # CPU mode for Streamlit Cloud
-    reader = easyocr.Reader(['en'], gpu=False)
+    # Force CPU mode for Streamlit Cloud
+    reader = easyocr.Reader(
+        ['en', 'ch_sim'],   # add languages you need
+        gpu=False,
+        model_storage_directory=MODEL_DIR,
+        user_network_directory=MODEL_DIR,
+        download_enabled=False
+    )
     # Warm-up: trigger model load with a tiny dummy image
     dummy = np.zeros((16, 16, 3), dtype=np.uint8)
     try:
         _ = reader.readtext(dummy)
     except Exception:
-        # Some versions may complain about too-small images; ignore but ensures weights are fetched
         pass
     return reader
 
-# Preload immediately when the app starts
-with st.spinner("Initializing and downloading EasyOCR models… first run may take a few minutes"):
+with st.spinner("Initializing EasyOCR models… first run may take a few seconds"):
     reader = get_reader()
 
+# --- Utility functions ---
 def load_and_fix_orientation(uploaded_file):
     img = Image.open(uploaded_file)
     img = ImageOps.exif_transpose(img)
     return img
 
 def run_easyocr(img):
-    img_np = np.array(img)  # Convert PIL → NumPy
+    img_np = np.array(img)
     results = reader.readtext(img_np)
     return results
 
@@ -58,8 +66,11 @@ def build_structured_json(results, filename, threshold=0.7):
 # --- Streamlit UI ---
 st.title("Receipt OCR Scanner (EasyOCR → JSON)")
 
-# Optional: interactive threshold control
-threshold = st.slider("Confidence threshold (flag low-confidence with *)", 0.0, 1.0, 0.7, 0.05)
+# Confidence threshold slider
+threshold = st.slider(
+    "Confidence threshold (flag low-confidence with *)",
+    0.0, 1.0, 0.7, 0.05
+)
 
 uploaded_file = st.file_uploader("Upload a receipt image", type=["jpg", "jpeg", "png"])
 
@@ -79,5 +90,11 @@ if uploaded_file is not None:
     structured = build_structured_json(results, uploaded_file.name, threshold=threshold)
     st.json(structured)
 
+    # Allow download
     json_str = json.dumps(structured, indent=2)
-    st.download_button("Download JSON", json_str, file_name="receipt.json", mime="application/json")
+    st.download_button(
+        "Download JSON",
+        json_str,
+        file_name="receipt.json",
+        mime="application/json"
+    )
