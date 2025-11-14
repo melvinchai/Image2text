@@ -4,28 +4,27 @@ from PIL import Image, ImageOps
 import numpy as np
 import json
 
-# --- Cache the EasyOCR reader so it only initializes once ---
+# --- Cache and preload the EasyOCR reader at startup ---
 @st.cache_resource
 def get_reader():
-    # gpu=False ensures CPU mode on Streamlit Cloud
+    # This triggers the model download once, then caches it
     return easyocr.Reader(['en'], gpu=False)
 
-reader = get_reader()
+# Preload immediately when the app starts
+with st.spinner("Loading EasyOCR model… first run may take a few minutes"):
+    reader = get_reader()
 
 def load_and_fix_orientation(uploaded_file):
-    """Load an uploaded image and normalize EXIF orientation so it's upright."""
     img = Image.open(uploaded_file)
     img = ImageOps.exif_transpose(img)
     return img
 
 def run_easyocr(img):
-    """Run EasyOCR on a PIL image by converting to NumPy array."""
     img_np = np.array(img)  # Convert PIL → NumPy
     results = reader.readtext(img_np)
     return results
 
 def build_structured_json(results, filename, threshold=0.7):
-    """Build structured JSON skeleton from OCR results, flagging low-confidence items."""
     structured = {
         "filename": filename,
         "vendor_name": None,
@@ -36,18 +35,12 @@ def build_structured_json(results, filename, threshold=0.7):
         "invoice_number": None,
         "line_items": []
     }
-
     for idx, (bbox, text, confidence) in enumerate(results):
         flagged_text = text + (" *" if confidence < threshold else "")
         structured["line_items"].append({
             "description": flagged_text,
-            "code": None,
-            "quantity": None,
-            "unit_price": None,
-            "line_total": None,
             "confidence": confidence
         })
-
     return structured
 
 # --- Streamlit UI ---
@@ -56,7 +49,6 @@ st.title("Receipt OCR Scanner (EasyOCR → JSON)")
 uploaded_file = st.file_uploader("Upload a receipt image", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    # Fix orientation before showing
     img = load_and_fix_orientation(uploaded_file)
     st.image(img, caption="Upright receipt", use_column_width=True)
 
@@ -69,7 +61,7 @@ if uploaded_file is not None:
         marker = "*" if confidence < threshold else ""
         st.write(f"{idx}: {text}{marker} (confidence: {confidence:.2f})")
 
-    st.subheader("Structured JSON (for Claude reconciliation)")
+    st.subheader("Structured JSON")
     structured = build_structured_json(results, uploaded_file.name, threshold=threshold)
     st.json(structured)
 
