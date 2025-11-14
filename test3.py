@@ -8,7 +8,6 @@ import traceback
 
 # --- Configure EasyOCR to use bundled models ---
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "models", "easyocr")
-
 st.write("🔎 Trace: Starting app, MODEL_DIR =", MODEL_DIR)
 
 @st.cache_resource
@@ -23,14 +22,10 @@ def get_reader():
             download_enabled=False
         )
         st.write("✅ Trace: EasyOCR Reader initialized successfully")
-        # Warm-up: trigger model load with a tiny dummy image
+        # Warm-up
         dummy = np.zeros((16, 16, 3), dtype=np.uint8)
-        try:
-            _ = reader.readtext(dummy)
-            st.write("✅ Trace: Warm-up readtext() succeeded")
-        except Exception as e:
-            st.error("⚠️ Trace: Warm-up failed: " + str(e))
-            st.write(traceback.format_exc())
+        _ = reader.readtext(dummy)
+        st.write("✅ Trace: Warm-up readtext() succeeded")
         return reader
     except Exception as e:
         st.error("❌ Trace: Failed to initialize EasyOCR Reader: " + str(e))
@@ -60,16 +55,19 @@ def run_easyocr(img):
     st.write("🔎 Trace: Entering run_easyocr()")
     try:
         img_np = np.array(img)
+        st.write(f"Trace: Image converted to numpy array, shape={img_np.shape}, dtype={img_np.dtype}")
         results = reader.readtext(img_np)
         st.write(f"✅ Trace: OCR returned {len(results)} results")
+        if results:
+            st.write("Trace: First result sample:", results[0])
         return results
     except Exception as e:
         st.error("❌ Trace: OCR failed: " + str(e))
         st.write(traceback.format_exc())
         return []
-    
+
 def build_structured_json(results, filename, threshold=0.7):
-    st.write("🔎 Trace: Entering build_structured_json()")
+    st.write("🔎 Trace: Entering build_structured_json() with results type:", type(results))
     structured = {
         "filename": filename,
         "vendor_name": None,
@@ -81,7 +79,9 @@ def build_structured_json(results, filename, threshold=0.7):
         "line_items": []
     }
     try:
-        for idx, (bbox, text, confidence) in enumerate(results):
+        for idx, item in enumerate(results):
+            st.write(f"Trace: Processing result {idx}: {item}")
+            bbox, text, confidence = item
             flagged_text = text + (" *" if confidence < threshold else "")
             structured["line_items"].append({
                 "description": flagged_text,
@@ -115,24 +115,29 @@ if uploaded_file is not None:
 
     st.image(img, caption="Upright receipt", use_column_width=True)
 
-    with st.spinner("Scanning receipt with EasyOCR…"):
-        results = run_easyocr(img)
+    try:
+        with st.spinner("Scanning receipt with EasyOCR…"):
+            results = run_easyocr(img)
 
-    st.subheader("Raw OCR results")
-    for idx, (bbox, text, confidence) in enumerate(results):
-        marker = "*" if confidence < threshold else ""
-        st.write(f"{idx}: {text}{marker} (confidence: {confidence:.2f})")
+        st.subheader("Raw OCR results")
+        for idx, (bbox, text, confidence) in enumerate(results):
+            marker = "*" if confidence < threshold else ""
+            st.write(f"{idx}: {text}{marker} (confidence: {confidence:.2f})")
 
-    st.subheader("Structured JSON")
-    structured = build_structured_json(results, uploaded_file.name, threshold=threshold)
-    st.json(structured)
+        st.subheader("Structured JSON")
+        structured = build_structured_json(results, uploaded_file.name, threshold=threshold)
+        st.json(structured)
 
-    json_str = json.dumps(structured, indent=2)
-    st.download_button(
-        "Download JSON",
-        json_str,
-        file_name="receipt.json",
-        mime="application/json"
-    )
+        json_str = json.dumps(structured, indent=2)
+        st.download_button(
+            "Download JSON",
+            json_str,
+            file_name="receipt.json",
+            mime="application/json"
+        )
+    except Exception as e:
+        st.error("❌ Fatal error caught: " + str(e))
+        st.write(traceback.format_exc())
+        st.stop()
 else:
     st.write("🔎 Trace: No file uploaded yet")
